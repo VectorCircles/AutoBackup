@@ -1,30 +1,45 @@
+use std::sync::mpsc;
+use std::sync::Arc;
+use std::sync::Mutex;
+use tokio_cron_scheduler::{Job, JobScheduler};
+
 #[tokio::main]
 async fn main() {
-    let config = config::init();
-    drive_backup::backup(&drive_backup::init(&config).await).await
+    let config = Arc::pin(config::init());
+    let (snd, rcv) = mpsc::channel::<()>();
+    let snd = Arc::new(Mutex::new(snd));
+
+    let backup = async {
+        // BACKUP THREAD
+        let config = config.clone();
+        std::thread::spawn(|| async move {
+            let google_drive = drive_backup::init(&config).await;
+            loop {
+                rcv.recv().unwrap();
+                drive_backup::backup(&google_drive).await;
+            }
+        })
+        .join()
+        .unwrap()
+        .await
+    };
+
+    let scheduler = async {
+        // SCHEDULER THREAD
+        let mut sched = JobScheduler::new();
+        sched
+            .add(
+                Job::new(config.backup_cron.as_str(), move |_, _| {
+                    snd.lock().unwrap().send(()).unwrap()
+                })
+                .unwrap(),
+            )
+            .unwrap();
+        sched.start().await.unwrap()
+    };
+
+    futures::join!(backup, scheduler);
 }
 
+pub mod config;
 pub mod drive_backup;
-pub mod config {
-    use serde::{Deserialize, Serialize};
-
-    pub fn init() -> Config {
-        let src = std::fs::read_to_string("./config.yml")
-            .map_err(|_| {
-                std::fs::write("./config.yml", include_str!("config-example.yml")).unwrap();
-            })
-            .expect("No config provided. The dummy configuration file was generated. Please, fill it up.");
-        serde_yaml::from_str(src.as_str()).unwrap()
-    }
-
-    #[derive(Deserialize, Serialize, Debug)]
-    pub struct Config {
-        pub google_drive: GoogleDriveConfig,
-    }
-
-    #[derive(Deserialize, Serialize, Debug)]
-    pub struct GoogleDriveConfig {
-        pub client_id: String,
-        pub client_secret: String,
-    }
-}

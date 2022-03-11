@@ -15,6 +15,7 @@ pub async fn init(
                 client_id,
                 client_secret,
             },
+        ..
     }: &Config,
 ) -> DriveHub {
     let secret = oauth2::ApplicationSecret {
