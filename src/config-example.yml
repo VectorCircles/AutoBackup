@@ -2,3 +2,5 @@ backup_cron: "* */30 * * * *"
 google_drive:
   client_id: my_awesome_client
   client_secret: my_awesom_secret
+  prefix: ./drive
+  prev_update_time: null

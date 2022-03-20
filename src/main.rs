@@ -1,22 +1,23 @@
 use std::sync::mpsc;
 use std::sync::Arc;
-use std::sync::Mutex;
 use tokio_cron_scheduler::{Job, JobScheduler};
 
 #[tokio::main]
 async fn main() {
-    let config = Arc::pin(config::init());
+    let config = Arc::pin(tokio::sync::Mutex::new(config::init()));
     let (snd, rcv) = mpsc::channel::<()>();
-    let snd = Arc::new(Mutex::new(snd));
+    let snd = Arc::pin(std::sync::Mutex::new(snd));
 
-    let backup = async {
+    let backup_config = config.clone();
+    let backup = async move {
         // BACKUP THREAD
-        let config = config.clone();
+        let config = backup_config;
         std::thread::spawn(|| async move {
-            let google_drive = drive_backup::init(&config).await;
+            let google_drive = drive_backup::init(&*config.lock().await).await;
+            drive_backup::initial_backup(&google_drive, &mut *config.lock().await).await;
             loop {
                 rcv.recv().unwrap();
-                drive_backup::backup(&google_drive).await;
+                drive_backup::backup_changes(&google_drive, &mut *config.lock().await).await;
             }
         })
         .join()
@@ -24,12 +25,14 @@ async fn main() {
         .await
     };
 
+    let scheduler_config = config;
     let scheduler = async {
         // SCHEDULER THREAD
+        let config = scheduler_config;
         let mut sched = JobScheduler::new();
         sched
             .add(
-                Job::new(config.backup_cron.as_str(), move |_, _| {
+                Job::new(config.lock().await.backup_cron.as_str(), move |_, _| {
                     snd.lock().unwrap().send(()).unwrap()
                 })
                 .unwrap(),

@@ -17,8 +17,17 @@ pub struct Config {
     pub google_drive: GoogleDriveConfig,
 }
 
+impl Config {
+    /// Writes this config to `./config.yml`
+    pub fn write(&self) {
+        std::fs::write("./config.yml", serde_yaml::to_string(self).unwrap()).unwrap();
+    }
+}
+
 #[derive(Deserialize, Serialize, Debug)]
 pub struct GoogleDriveConfig {
     pub client_id: String,
     pub client_secret: String,
+    pub prefix: String,
+    pub prev_update_time: Option<String>,
 }
