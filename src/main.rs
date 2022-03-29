@@ -8,21 +8,21 @@ async fn main() {
     let (snd, rcv) = mpsc::channel::<()>();
     let snd = Arc::pin(std::sync::Mutex::new(snd));
 
-    let backup_config = config.clone();
-    let backup = async move {
-        // BACKUP THREAD
-        let config = backup_config;
-        std::thread::spawn(|| async move {
-            let google_drive = drive_backup::init(&*config.lock().await).await;
-            drive_backup::initial_backup(&google_drive, &mut *config.lock().await).await;
-            loop {
-                rcv.recv().unwrap();
-                drive_backup::backup_changes(&google_drive, &mut *config.lock().await).await;
-            }
-        })
-        .join()
-        .unwrap()
-        .await
+    let backup = {
+        let config = config.clone();
+        async move {
+            // BACKUP THREAD
+            std::thread::spawn(|| async move {
+                let drive = drive_backup::DriveBackup::new(config).await;
+                loop {
+                    rcv.recv().unwrap();
+                    drive.backup_changes().await;
+                }
+            })
+            .join()
+            .unwrap()
+            .await
+        }
     };
 
     let scheduler_config = config;
