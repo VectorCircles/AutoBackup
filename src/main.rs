@@ -1,9 +1,12 @@
+use log::*;
 use std::sync::mpsc;
 use std::sync::Arc;
 use tokio_cron_scheduler::{Job, JobScheduler};
 
 #[tokio::main]
 async fn main() {
+    env_logger::init();
+
     let config = Arc::pin(tokio::sync::Mutex::new(config::init()));
     let (snd, rcv) = mpsc::channel::<()>();
     let snd = Arc::pin(std::sync::Mutex::new(snd));
@@ -15,8 +18,14 @@ async fn main() {
             std::thread::spawn(|| async move {
                 let drive = drive_backup::DriveBackup::new(config).await;
                 loop {
+                    debug!("Awaiting for the next backup call");
                     rcv.recv().unwrap();
-                    drive.backup_changes().await;
+                    debug!("Backup call received");
+                    {
+                        trace!("Calling `drive.backup_changes`");
+                        drive.backup_changes().await;
+                        trace!("Finished `drive.backup_changes`");
+                    }
                 }
             })
             .join()
@@ -33,6 +42,7 @@ async fn main() {
         sched
             .add(
                 Job::new(config.lock().await.backup_cron.as_str(), move |_, _| {
+                    debug!("Scheduler calls backup");
                     snd.lock().unwrap().send(()).unwrap()
                 })
                 .unwrap(),

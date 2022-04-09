@@ -4,6 +4,7 @@ use google_drive3::{
     hyper::{self, body},
     hyper_rustls, oauth2, DriveHub,
 };
+use log::*;
 use std::{borrow::Borrow, pin::Pin, sync::Arc};
 use tokio::sync::Mutex;
 
@@ -15,6 +16,7 @@ pub struct DriveBackup {
 impl DriveBackup {
     /// Instantiates the object and performs the initial backup
     pub async fn new(config: Pin<Arc<Mutex<Config>>>) -> Self {
+        trace!("Constructing DriveBackup");
         let (client_id, client_secret) = {
             let config = config.lock().await;
             let Config {
@@ -61,11 +63,13 @@ impl DriveBackup {
 
         let this = Self { config, hub };
         this.initial_backup().await;
+        trace!("Constructed DriveBackup");
         this
     }
 
     /// Lazily downloads all changes from the google drive
     pub async fn backup_changes(&self) {
+        trace!("Called DriveBackup::backup_changes");
         /* ---- SYSTEM STATE PROCESSING ---- */
         let update_time = {
             let update_time = self
@@ -117,6 +121,7 @@ impl DriveBackup {
                 }),
         )
         .await;
+        trace!("Finished DriveBackup::backup_changes");
     }
 }
 
@@ -124,18 +129,26 @@ impl DriveBackup {
     /// Lazily performs initial drive backup
     async fn initial_backup(&self) {
         /* ---- PROCESSING SYSTEM STATE ---- */
+        debug!("Checking if initial backup is required");
         {
             let mut config = self.config.lock().await;
-            if config.google_drive.prev_update_time.is_some() {
-                return;
-            } else {
+            trace!(
+                "Google drive last update time is: {:?}",
+                config.google_drive.prev_update_time
+            );
+            if config.google_drive.prev_update_time.is_none() {
                 config.google_drive.prev_update_time = Some(Utc::now().to_rfc3339());
                 config.write();
+            } else {
+                debug!("No initial backup required");
+                return;
             }
         }
 
         /* ---- LOADING INITIAL VERSION OF THE FILES ---- */
+        info!("Performing initial backup of Google Drive");
         let base_directory = format!("{}/base", self.config.lock().await.google_drive.prefix);
+        trace!("Base directory path: {}", base_directory);
         let files = self
             .hub
             .lock()
@@ -149,6 +162,7 @@ impl DriveBackup {
             .files
             .unwrap()
             .into_iter();
+        info!("The initial backup consists of {} file(s)", files.len());
         futures::future::join_all(
             files
                 .map(|file| {
@@ -157,11 +171,16 @@ impl DriveBackup {
                         file.name.as_ref().unwrap().clone(),
                     )
                 })
-                .map(|(id, name)| async {
-                    self.download_drive_file(&base_directory, id, name).await
+                .map(|(id, name)| {
+                    let base_directory = base_directory.clone();
+                    async move {
+                        self.download_drive_file(&base_directory, id.clone(), name.clone())
+                            .await;
+                    }
                 }),
         )
         .await;
+        info!("Done initial backup of Google Drive");
     }
 
     /// Downloads a single Drive file
@@ -173,6 +192,7 @@ impl DriveBackup {
         file_id: impl AsRef<str>,
         file_name: impl AsRef<str>,
     ) {
+        trace!("Downloading {} ({})", file_id.as_ref(), file_name.as_ref());
         let hub = self.hub.lock().await;
         std::fs::create_dir_all(dest_folder.as_ref()).unwrap();
 
@@ -182,9 +202,16 @@ impl DriveBackup {
             .param("alt", "media")
             .doit()
             .await
+            .map_err(|_| {
+                warn!(
+                    "Failed to download {} ({})",
+                    file_name.as_ref(),
+                    file_id.as_ref(),
+                )
+            })
             .map(|(body, _)| body)
             .map(|body| {
-                Box::pin(async move {
+                Box::pin(async {
                     std::fs::write(
                         format!("{}/{}", dest_folder.as_ref(), file_name.as_ref()),
                         body::to_bytes(body).await.unwrap(),
@@ -193,7 +220,8 @@ impl DriveBackup {
                 })
             })
         {
-            x.await
+            x.await;
+            trace!("Downloaded {} ({})", file_id.as_ref(), file_name.as_ref());
         }
     }
 }
