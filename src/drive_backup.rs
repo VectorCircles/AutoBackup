@@ -5,7 +5,7 @@ use google_drive3::{
     hyper_rustls, oauth2, DriveHub,
 };
 use log::*;
-use std::{borrow::Borrow, pin::Pin, sync::Arc};
+use std::{borrow::Borrow, collections::LinkedList, pin::Pin, sync::Arc};
 use tokio::sync::Mutex;
 
 pub struct DriveBackup {
@@ -193,10 +193,18 @@ impl DriveBackup {
         file_name: impl AsRef<str>,
     ) {
         trace!("Downloading {} ({})", file_id.as_ref(), file_name.as_ref());
-        let hub = self.hub.lock().await;
-        std::fs::create_dir_all(dest_folder.as_ref()).unwrap();
+        let dest_folder = format!(
+            "{}/{}",
+            dest_folder.as_ref(),
+            self.discover_file_parents(&file_id).await
+        );
 
-        if let Ok(x) = hub
+        std::fs::create_dir_all(&dest_folder).unwrap();
+        // Downloading file
+        if let Ok(x) = self
+            .hub
+            .lock()
+            .await
             .files()
             .get(file_id.as_ref())
             .param("alt", "media")
@@ -211,9 +219,10 @@ impl DriveBackup {
             })
             .map(|(body, _)| body)
             .map(|body| {
-                Box::pin(async {
+                let file_name = String::from(file_name.as_ref());
+                Box::pin(async move {
                     std::fs::write(
-                        format!("{}/{}", dest_folder.as_ref(), file_name.as_ref()),
+                        format!("{}/{}", dest_folder, file_name),
                         body::to_bytes(body).await.unwrap(),
                     )
                     .unwrap();
@@ -223,5 +232,38 @@ impl DriveBackup {
             x.await;
             trace!("Downloaded {} ({})", file_id.as_ref(), file_name.as_ref());
         }
+    }
+
+    /// Given file file id, returns its path on the drive _excluding the filename_
+    async fn discover_file_parents(&self, file_id: impl AsRef<str>) -> String {
+        // Iteratively getting the file's full path
+        {
+            let mut file_id = Some(String::from(file_id.as_ref()));
+            let mut path = LinkedList::new();
+            while file_id.is_some() {
+                let hub = self.hub.lock().await;
+                let (_, file) = hub
+                    .files()
+                    .get(file_id.as_ref().unwrap())
+                    .param("fields", "*")
+                    .doit()
+                    .await
+                    .unwrap();
+                file_id = file.parents.and_then(|parents| parents.into_iter().next());
+                path.push_front(
+                    file.name
+                        .unwrap_or_else(|| file_id.as_ref().unwrap().clone()),
+                );
+            }
+            path.pop_back(); // Removing filename, as it isn't a folder
+            path
+        }
+        // Generating the path string
+        .into_iter()
+        .fold(String::new(), |mut partial_path, element| {
+            partial_path += "/";
+            partial_path += &element;
+            partial_path
+        })
     }
 }
