@@ -1,12 +1,40 @@
+use chrono::Utc;
 use log::*;
+use log4rs::append::file::FileAppender;
+use log4rs::config::Appender;
+use log4rs::config::Root;
+use log4rs::encode::pattern::PatternEncoder;
+use log4rs::Config;
 use std::sync::mpsc;
 use std::sync::Arc;
 use tokio_cron_scheduler::{Job, JobScheduler};
 
 #[tokio::main]
 async fn main() {
-    env_logger::init();
+    // LOGGER SETUP
+    log4rs::init_config(
+        Config::builder()
+            .appender(
+                Appender::builder().build(
+                    "logfile",
+                    Box::new(
+                        FileAppender::builder()
+                            .encoder(Box::new(PatternEncoder::new("{f} -- {l} -- {m}\n")))
+                            .build(format!("log/log-{}.txt", Utc::now().to_rfc2822()))
+                            .unwrap(),
+                    ),
+                ),
+            )
+            .build(
+                Root::builder()
+                    .appender("logfile")
+                    .build(LevelFilter::Trace),
+            )
+            .unwrap(),
+    )
+    .unwrap();
 
+    // MAIN LOOP DEFITIONS
     let config = Arc::pin(tokio::sync::Mutex::new(config::init()));
     let (snd, rcv) = mpsc::channel::<()>();
     let snd = Arc::pin(std::sync::Mutex::new(snd));
