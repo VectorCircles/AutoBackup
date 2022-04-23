@@ -9,7 +9,7 @@ async fn main() {
     flexi_logger::Logger::try_with_str("info, vectorcircles_auto_backup=trace")
         .unwrap()
         .log_to_file(flexi_logger::FileSpec::default().directory("log"))
-        // .log_to_stderr()
+        .duplicate_to_stderr(flexi_logger::Duplicate::Debug)
         .start()
         .unwrap();
 
