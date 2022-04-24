@@ -47,7 +47,13 @@ impl DriveBackup {
         .unwrap();
 
         let hub = Arc::pin(Mutex::new(DriveHub::new(
-            hyper::Client::builder().build(hyper_rustls::HttpsConnector::with_native_roots()),
+            hyper::Client::builder().build(
+                hyper_rustls::HttpsConnectorBuilder::new()
+                    .with_native_roots()
+                    .https_or_http()
+                    .enable_http1()
+                    .build(),
+            ),
             auth,
         )));
 
