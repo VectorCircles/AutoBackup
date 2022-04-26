@@ -98,36 +98,49 @@ impl DriveBackup {
             self.config.lock().await.google_drive.prefix,
             Utc::now()
         );
-        futures::future::join_all(
-            self.hub
-                .lock()
-                .await
-                .files()
-                .list()
-                .param("fields", "*")
-                .doit()
-                .await
-                .unwrap()
-                .1
-                .files
-                .unwrap()
-                .into_iter()
-                .filter_map(|file| {
-                    let modified_time = file
-                        .modified_time
-                        .as_ref()
-                        .map(|string| DateTime::parse_from_rfc3339(string).unwrap())
-                        .expect("DateTime did not arrive with the response");
-                    (update_time < modified_time)
-                        .then(|| file.id.unwrap())
-                        .zip(file.name)
-                })
-                .map(|(id, name)| {
-                    let current_dir = current_dir.clone();
-                    async move { self.download_drive_file(current_dir, id, name).await }
-                }),
-        )
+        let files = self
+            .hub
+            .lock()
+            .await
+            .files()
+            .list()
+            .param("fields", "*")
+            .doit()
+            .await
+            .unwrap()
+            .1
+            .files
+            .unwrap()
+            .into_iter()
+            .filter_map(|file| {
+                let modified_time = file
+                    .modified_time
+                    .as_ref()
+                    .map(|string| DateTime::parse_from_rfc3339(string).unwrap())
+                    .expect("DateTime did not arrive with the response");
+                (update_time < modified_time)
+                    .then(|| file.id.unwrap())
+                    .zip(file.name)
+            })
+            .collect::<Vec<_>>();
+
+        if files.is_empty() {
+            return;
+        }
+
+        let progress_bar = Arc::pin(Mutex::new(ProgressBar::new(files.len() as u64)));
+        info!("Pulling drive updates");
+        futures::future::join_all(files.into_iter().map(|(id, name)| {
+            let current_dir = current_dir.clone();
+            let progress_bar = progress_bar.clone();
+            async move {
+                self.download_drive_file(current_dir, id, name).await;
+                progress_bar.lock().await.inc(1);
+            }
+        }))
         .await;
+        progress_bar.lock().await.finish();
+        trace!("Finished pulling dive updates");
         trace!("Finished DriveBackup::backup_changes");
     }
 }
