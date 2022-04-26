@@ -13,7 +13,7 @@ async fn main() {
                 .directory("log")
                 .basename(sys_info::hostname().unwrap_or_else(|_| String::from("unknown"))),
         )
-        .duplicate_to_stderr(flexi_logger::Duplicate::Info)
+        .duplicate_to_stdout(flexi_logger::Duplicate::Info)
         .start()
         .unwrap();
 

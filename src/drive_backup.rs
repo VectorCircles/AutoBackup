@@ -4,6 +4,7 @@ use google_drive3::{
     hyper::{self, body},
     hyper_rustls, oauth2, DriveHub,
 };
+use indicatif::ProgressBar;
 use log::*;
 use std::{borrow::Borrow, collections::LinkedList, pin::Pin, sync::Arc};
 use tokio::sync::Mutex;
@@ -166,11 +167,16 @@ impl DriveBackup {
             .unwrap()
             .1
             .files
-            .unwrap()
-            .into_iter();
+            .unwrap();
         info!("The initial backup consists of {} file(s)", files.len());
+        let progress_bar = Arc::pin(Mutex::new(ProgressBar::new(files.len() as u64)));
+        progress_bar
+            .lock()
+            .await
+            .set_message("Initial Backup Progress");
         futures::future::join_all(
             files
+                .into_iter()
                 .map(|file| {
                     (
                         file.id.as_ref().unwrap().clone(),
@@ -179,13 +185,16 @@ impl DriveBackup {
                 })
                 .map(|(id, name)| {
                     let base_directory = base_directory.clone();
+                    let progress_bar = progress_bar.clone();
                     async move {
                         self.download_drive_file(&base_directory, id.clone(), name.clone())
                             .await;
+                        progress_bar.lock().await.inc(1);
                     }
                 }),
         )
         .await;
+        progress_bar.lock().await.finish();
         info!("Done initial backup of Google Drive");
     }
 
