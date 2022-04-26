@@ -8,8 +8,12 @@ async fn main() {
     // LOGGER SETUP
     flexi_logger::Logger::try_with_str("info, vectorcircles_auto_backup=trace")
         .unwrap()
-        .log_to_file(flexi_logger::FileSpec::default().directory("log"))
-        .duplicate_to_stderr(flexi_logger::Duplicate::Debug)
+        .log_to_file(
+            flexi_logger::FileSpec::default()
+                .directory("log")
+                .basename(sys_info::hostname().unwrap_or_else(|_| String::from("unknown"))),
+        )
+        .duplicate_to_stderr(flexi_logger::Duplicate::Info)
         .start()
         .unwrap();
 
