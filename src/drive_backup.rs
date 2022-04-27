@@ -113,12 +113,18 @@ impl DriveBackup {
             .unwrap()
             .into_iter()
             .filter_map(|file| {
-                let modified_time = file
-                    .modified_time
-                    .as_ref()
-                    .map(|string| DateTime::parse_from_rfc3339(string).unwrap())
-                    .expect("DateTime did not arrive with the response");
-                (update_time < modified_time)
+                let date = |s: &Option<String>| {
+                    s.as_ref()
+                        .map(AsRef::as_ref)
+                        .map(DateTime::parse_from_rfc3339)
+                        .map(Result::unwrap)
+                };
+                let modified_time = date(&file.modified_time)
+                    .expect("Modified DateTime did not arrive with the response");
+                let created_time = date(&file.created_time)
+                    .expect("Created DateTime did not arrive with the response");
+
+                (update_time <= modified_time || update_time <= created_time)
                     .then(|| file.id.unwrap())
                     .zip(file.name)
             })
