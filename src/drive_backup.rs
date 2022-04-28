@@ -1,4 +1,7 @@
-use crate::config::{Config, GoogleDriveConfig};
+use crate::{
+    config::{Config, GoogleDriveConfig},
+    util::utc_to_string,
+};
 use chrono::{DateTime, Utc};
 use google_drive3::{
     hyper::{self, body},
@@ -96,7 +99,7 @@ impl DriveBackup {
         let current_dir = format!(
             "{}/{}",
             self.config.lock().await.google_drive.prefix,
-            Utc::now()
+            utc_to_string(Utc::now())
         );
         let files = self
             .hub
