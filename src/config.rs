@@ -21,6 +21,7 @@ pub fn init() -> Config {
 pub struct Config {
     pub backup_cron: String,
     pub google_drive: Option<GoogleDriveConfig>,
+    pub trello: Option<TrelloConfig>,
 }
 
 impl Config {
@@ -35,6 +36,7 @@ impl Default for Config {
         Self {
             backup_cron: "*/30 * * * * *".into(),
             google_drive: Some(Default::default()),
+            trello: Some(Default::default()),
         }
     }
 }
@@ -54,6 +56,23 @@ impl Default for GoogleDriveConfig {
             client_secret: "put_your_secret_here".into(),
             prefix: "./drive".into(),
             prev_update_time: None,
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct TrelloConfig {
+    pub client_id: String,
+    pub client_secret: String,
+    pub prefix: String,
+}
+
+impl Default for TrelloConfig {
+    fn default() -> Self {
+        Self {
+            client_id: "put_your_client_id_here".into(),
+            client_secret: "put_your_secret_here".into(),
+            prefix: "./trello".into(),
         }
     }
 }

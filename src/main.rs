@@ -39,10 +39,32 @@ async fn main() {
             }
         }
     };
+    // TRELLO BACKUP ROUTINE
+    let trello_routine = {
+        let config = config.clone();
+        async move {
+            if config.lock().await.trello.is_some() {
+                let trello = trello_backup::TrelloBackup::new(config.clone()).await;
+                let cron = config.lock().await.backup_cron.clone();
+                loop {
+                    debug!("Awaiting for the next trello backup call.");
+                    await_next_call(&cron).await;
+                    debug!("Backup call received");
+                    {
+                        trace!("Calling `trello.backup_changes`");
+                        trello.backup_changes().await;
+                        trace!("Finished `trello.backup_changes`");
+                    }
+                }
+            }
+        }
+    };
 
-    futures::join!(drive_routine);
+    /* ---- LAUNCHING ROUTINES ---- */
+    futures::join!(drive_routine, trello_routine);
 }
 
 pub mod config;
 pub mod drive_backup;
+pub mod trello_backup;
 pub mod util;
