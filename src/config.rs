@@ -1,20 +1,26 @@
 use serde::{Deserialize, Serialize};
 
 pub fn init() -> Config {
-    let src = std::fs::read_to_string("./config.yml")
+    // READING CONFIG FILE SOURCE
+    std::fs::read_to_string("./config.yml")
+        // IF FAILED TO READ CONFIG -- GENERATE A DEFAULT ONE AND PUT IT TO THE FILE
         .map_err(|_| {
-            std::fs::write("./config.yml", include_str!("config-example.yml")).unwrap();
+            log::error!("Failed to read the configuration file.");
+            log::info!("Generating new dummy configuration file. Please, fill it up.");
+            Config::default().write();
         })
-        .expect(
-            "No config provided. The dummy configuration file was generated. Please, fill it up.",
-        );
-    serde_yaml::from_str(src.as_str()).unwrap()
+        // ELSE -- PARSE CONFIG FILE
+        .and_then(|file_src| {
+            serde_yaml::from_str(file_src.as_str())
+                .map_err(|err| log::error!("Failed to parse config file: {}", err))
+        })
+        .unwrap()
 }
 
 #[derive(Deserialize, Serialize, Debug)]
 pub struct Config {
     pub backup_cron: String,
-    pub google_drive: GoogleDriveConfig,
+    pub google_drive: Option<GoogleDriveConfig>,
 }
 
 impl Config {
@@ -24,10 +30,30 @@ impl Config {
     }
 }
 
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            backup_cron: "*/30 * * * * *".into(),
+            google_drive: Some(Default::default()),
+        }
+    }
+}
+
 #[derive(Deserialize, Serialize, Debug)]
 pub struct GoogleDriveConfig {
     pub client_id: String,
     pub client_secret: String,
     pub prefix: String,
     pub prev_update_time: Option<String>,
+}
+
+impl Default for GoogleDriveConfig {
+    fn default() -> Self {
+        Self {
+            client_id: "put_your_client_id_here".into(),
+            client_secret: "put_your_secret_here".into(),
+            prefix: "./drive".into(),
+            prev_update_time: None,
+        }
+    }
 }

@@ -23,15 +23,11 @@ impl DriveBackup {
         trace!("Constructing DriveBackup");
         let (client_id, client_secret) = {
             let config = config.lock().await;
-            let Config {
-                google_drive:
-                    GoogleDriveConfig {
-                        client_id,
-                        client_secret,
-                        ..
-                    },
+            let GoogleDriveConfig {
+                client_id,
+                client_secret,
                 ..
-            }: &Config = config.borrow();
+            } = config.borrow().google_drive.as_ref().unwrap();
             (client_id.clone(), client_secret.clone())
         };
         let secret = oauth2::ApplicationSecret {
@@ -87,6 +83,8 @@ impl DriveBackup {
                 .lock()
                 .await
                 .google_drive
+                .as_mut()
+                .unwrap()
                 .prev_update_time
                 .replace(Utc::now().to_rfc3339())
                 .map(|x| DateTime::parse_from_rfc3339(&x).expect("Update time is invalid."))
@@ -98,7 +96,13 @@ impl DriveBackup {
         /* ---- DOWNLOADING UPDATED FILES ---- */
         let current_dir = format!(
             "{}/{}",
-            self.config.lock().await.google_drive.prefix,
+            self.config
+                .lock()
+                .await
+                .google_drive
+                .as_ref()
+                .unwrap()
+                .prefix,
             utc_to_string(Utc::now())
         );
         let files = self
@@ -163,10 +167,17 @@ impl DriveBackup {
             let mut config = self.config.lock().await;
             trace!(
                 "Google drive last update time is: {:?}",
-                config.google_drive.prev_update_time
+                config.google_drive.as_ref().unwrap().prev_update_time
             );
-            if config.google_drive.prev_update_time.is_none() {
-                config.google_drive.prev_update_time = Some(Utc::now().to_rfc3339());
+            if config
+                .google_drive
+                .as_ref()
+                .unwrap()
+                .prev_update_time
+                .is_none()
+            {
+                config.google_drive.as_mut().unwrap().prev_update_time =
+                    Some(Utc::now().to_rfc3339());
                 config.write();
             } else {
                 debug!("No initial backup required");
@@ -176,7 +187,16 @@ impl DriveBackup {
 
         /* ---- LOADING INITIAL VERSION OF THE FILES ---- */
         info!("Performing initial backup of Google Drive");
-        let base_directory = format!("{}/base", self.config.lock().await.google_drive.prefix);
+        let base_directory = format!(
+            "{}/base",
+            self.config
+                .lock()
+                .await
+                .google_drive
+                .as_ref()
+                .unwrap()
+                .prefix
+        );
         trace!("Base directory path: {}", base_directory);
         let files = self
             .hub
