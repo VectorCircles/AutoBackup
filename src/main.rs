@@ -1,6 +1,7 @@
 use log::*;
-use std::str::FromStr;
 use std::sync::Arc;
+
+use crate::util::await_next_call;
 
 #[tokio::main]
 async fn main() {
@@ -16,37 +17,30 @@ async fn main() {
         .start()
         .unwrap();
 
-    // MAIN LOOP DEFITIONS
+    /* ---- ROUTINE DEFINITIONS ---- */
     let config = Arc::pin(tokio::sync::Mutex::new(config::init()));
-    {
+    // DRIVE BACKUP ROUTINE
+    let drive_routine = {
         let config = config.clone();
         async move {
-            // BACKUP ROUTINE
-            let backup_cron = cron::Schedule::from_str(&config.lock().await.backup_cron).unwrap();
-            let drive = drive_backup::DriveBackup::new(config).await;
-            loop {
-                futures_timer::Delay::new({
-                    let wait_duration = (backup_cron.upcoming(chrono::Utc).next().unwrap()
-                        - chrono::Utc::now())
-                    .to_std()
-                    .unwrap();
-                    debug!(
-                        "Awaiting for the next backup call (will trigger in {} seconds)",
-                        wait_duration.as_secs()
-                    );
-                    wait_duration
-                })
-                .await;
-                debug!("Backup call received");
-                {
-                    trace!("Calling `drive.backup_changes`");
-                    drive.backup_changes().await;
-                    trace!("Finished `drive.backup_changes`");
+            if config.lock().await.google_drive.is_some() {
+                let drive = drive_backup::DriveBackup::new(config.clone()).await;
+                let cron = config.lock().await.backup_cron.clone();
+                loop {
+                    debug!("Awaiting for the next backup call.");
+                    await_next_call(&cron).await;
+                    debug!("Backup call received");
+                    {
+                        trace!("Calling `drive.backup_changes`");
+                        drive.backup_changes().await;
+                        trace!("Finished `drive.backup_changes`");
+                    }
                 }
             }
         }
-    }
-    .await;
+    };
+
+    futures::join!(drive_routine);
 }
 
 pub mod config;
