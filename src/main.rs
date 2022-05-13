@@ -1,7 +1,7 @@
 use log::*;
 use std::sync::Arc;
 
-use crate::util::await_next_call;
+use crate::util::{await_next_call, Backup};
 
 #[tokio::main]
 async fn main() {

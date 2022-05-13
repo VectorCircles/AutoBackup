@@ -1,6 +1,6 @@
 use crate::{
     config::{Config, GoogleDriveConfig},
-    util::utc_to_string,
+    util::{utc_to_string, Backup, Lock},
 };
 use chrono::{DateTime, Utc};
 use google_drive3::{
@@ -17,9 +17,9 @@ pub struct DriveBackup {
     hub: Pin<Arc<Mutex<DriveHub>>>,
 }
 
-impl DriveBackup {
-    /// Instantiates the object and performs the initial backup
-    pub async fn new(config: Pin<Arc<Mutex<Config>>>) -> Self {
+#[async_trait::async_trait]
+impl Backup for DriveBackup {
+    async fn new(config: Lock<Config>) -> Self {
         trace!("Constructing DriveBackup");
         let (client_id, client_secret) = {
             let config = config.lock().await;
@@ -73,8 +73,7 @@ impl DriveBackup {
         this
     }
 
-    /// Lazily downloads all changes from the google drive
-    pub async fn backup_changes(&self) {
+    async fn backup_changes(&self) {
         trace!("Called DriveBackup::backup_changes");
         /* ---- SYSTEM STATE PROCESSING ---- */
         let update_time = {

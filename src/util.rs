@@ -1,8 +1,12 @@
 use std::{ops::Sub, pin::Pin, str::FromStr, sync::Arc};
 
+use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use cron::Schedule;
 use futures_timer::Delay;
+use tokio::sync::Mutex;
+
+use crate::config::Config;
 
 /// Defines the datetime printed format
 #[inline(always)]
@@ -24,4 +28,15 @@ pub async fn await_next_call(cron: impl AsRef<str>) -> Delay {
             .to_std()
             .unwrap(),
     )
+}
+
+pub type Lock<T> = Pin<Arc<Mutex<T>>>;
+
+#[async_trait]
+pub trait Backup {
+    /// Constructs Backup object, given config
+    async fn new(config: Lock<Config>) -> Self;
+
+    /// Backs the corresponding changes up
+    async fn backup_changes(&self);
 }
