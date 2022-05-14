@@ -62,16 +62,18 @@ impl Default for GoogleDriveConfig {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct TrelloConfig {
-    pub client_id: String,
-    pub client_secret: String,
+    pub api_key: String,
+    pub personal_token: String,
     pub prefix: String,
+    pub board_ids: Vec<String>,
 }
 
 impl Default for TrelloConfig {
     fn default() -> Self {
         Self {
-            client_id: "put_your_client_id_here".into(),
-            client_secret: "put_your_secret_here".into(),
+            board_ids: vec!["board_id0".into(), "board_id1".into(), "board_id2".into()],
+            api_key: "put_your_api_key_here".into(),
+            personal_token: "put_your_token_here".into(),
             prefix: "./trello".into(),
         }
     }
