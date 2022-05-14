@@ -17,17 +17,18 @@ pub fn utc_to_string(date: DateTime<Utc>) -> String {
 /// Creates a delayed future, given a cron string.
 ///
 /// Panics if the cron string is invalid.
-pub async fn await_next_call(cron: impl AsRef<str>) -> Delay {
-    Delay::new(
-        Schedule::from_str(cron.as_ref())
-            .unwrap()
-            .upcoming(chrono::Utc)
-            .next()
-            .unwrap()
-            .sub(chrono::Utc::now())
-            .to_std()
-            .unwrap(),
-    )
+pub async fn await_next_call(cron: impl AsRef<str>) {
+    let del = Schedule::from_str(cron.as_ref())
+        .unwrap()
+        .upcoming(chrono::Utc)
+        .next()
+        .unwrap()
+        .sub(chrono::Utc::now())
+        .to_std()
+        .unwrap();
+
+    println!("{:?}", del.as_secs_f32());
+    Delay::new(del).await
 }
 
 pub type Lock<T> = Pin<Arc<Mutex<T>>>;
