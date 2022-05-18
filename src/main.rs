@@ -25,7 +25,14 @@ async fn main() {
         async move {
             if config.lock().await.google_drive.is_some() {
                 let drive = drive_backup::DriveBackup::new(config.clone()).await;
-                let cron = config.lock().await.backup_cron.clone();
+                let cron = config
+                    .lock()
+                    .await
+                    .google_drive
+                    .as_ref()
+                    .unwrap()
+                    .backup_cron
+                    .clone();
                 loop {
                     debug!("Awaiting for the next backup call.");
                     await_next_call(&cron).await;
@@ -45,7 +52,14 @@ async fn main() {
         async move {
             if config.lock().await.trello.is_some() {
                 let trello = trello_backup::TrelloBackup::new(config.clone()).await;
-                let cron = config.lock().await.backup_cron.clone();
+                let cron = config
+                    .lock()
+                    .await
+                    .trello
+                    .as_ref()
+                    .unwrap()
+                    .backup_cron
+                    .clone();
                 loop {
                     debug!("Awaiting for the next trello backup call.");
                     await_next_call(&cron).await;
