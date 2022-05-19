@@ -1,3 +1,4 @@
+use flexi_logger::detailed_format;
 use log::*;
 use std::sync::Arc;
 
@@ -8,6 +9,7 @@ async fn main() {
     // LOGGER SETUP
     flexi_logger::Logger::try_with_str("info, vectorcircles_auto_backup=trace")
         .unwrap()
+        .format_for_files(detailed_format)
         .log_to_file(
             flexi_logger::FileSpec::default()
                 .directory("log")
