@@ -6,6 +6,8 @@ use crate::util::{await_next_call, Backup};
 
 #[tokio::main]
 async fn main() {
+    let config = Arc::pin(tokio::sync::Mutex::new(config::init()));
+
     // LOGGER SETUP
     flexi_logger::Logger::try_with_str("info, vectorcircles_auto_backup=trace")
         .unwrap()
@@ -15,12 +17,11 @@ async fn main() {
                 .directory("log")
                 .basename(sys_info::hostname().unwrap_or_else(|_| String::from("unknown"))),
         )
-        .duplicate_to_stdout(flexi_logger::Duplicate::Info)
+        .duplicate_to_stdout(config.lock().await.cmd_log_level.into())
         .start()
         .unwrap();
 
     /* ---- ROUTINE DEFINITIONS ---- */
-    let config = Arc::pin(tokio::sync::Mutex::new(config::init()));
     // DRIVE BACKUP ROUTINE
     let drive_routine = {
         let config = config.clone();

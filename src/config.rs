@@ -1,3 +1,4 @@
+use flexi_logger::Duplicate;
 use serde::{Deserialize, Serialize};
 
 pub fn init() -> Config {
@@ -17,8 +18,30 @@ pub fn init() -> Config {
         .unwrap()
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
+pub enum LogLevel {
+    Info,
+    Debug,
+    Warn,
+    Error,
+    Trace,
+}
+
+impl Into<Duplicate> for LogLevel {
+    fn into(self) -> Duplicate {
+        match self {
+            LogLevel::Info => Duplicate::Info,
+            LogLevel::Debug => Duplicate::Debug,
+            LogLevel::Warn => Duplicate::Warn,
+            LogLevel::Error => Duplicate::Error,
+            LogLevel::Trace => Duplicate::Trace,
+        }
+    }
+}
+
 #[derive(Deserialize, Serialize, Debug)]
 pub struct Config {
+    pub cmd_log_level: LogLevel,
     pub google_drive: Option<GoogleDriveConfig>,
     pub trello: Option<TrelloConfig>,
 }
@@ -33,6 +56,7 @@ impl Config {
 impl Default for Config {
     fn default() -> Self {
         Self {
+            cmd_log_level: LogLevel::Info,
             google_drive: Some(Default::default()),
             trello: Some(Default::default()),
         }
