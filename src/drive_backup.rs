@@ -249,44 +249,97 @@ impl DriveBackup {
         file_name: impl AsRef<str>,
     ) {
         trace!("Downloading {} ({})", file_id.as_ref(), file_name.as_ref());
-        let dest_folder = format!(
+        let dest_folder = Arc::pin(format!(
             "{}/{}",
             dest_folder.as_ref(),
             self.discover_file_parents(&file_id).await
-        );
+        ));
 
-        std::fs::create_dir_all(&dest_folder).unwrap();
+        std::fs::create_dir_all(&*dest_folder).unwrap();
         // Downloading file
-        if let Ok(x) = self
-            .hub
-            .lock()
-            .await
-            .files()
-            .get(file_id.as_ref())
-            .param("alt", "media")
-            .doit()
-            .await
-            .map_err(|_| {
-                warn!(
-                    "Failed to download {} ({})",
-                    file_name.as_ref(),
-                    file_id.as_ref(),
+        if let Ok(x) = async {
+            self.hub
+                .lock()
+                .await
+                .files()
+                .get(file_id.as_ref())
+                .param("alt", "media")
+                .doit()
+                .await
+        }
+        .await
+        .map(|(body, _)| body)
+        .map(|body| {
+            let file_name = String::from(file_name.as_ref());
+            let dest_folder = dest_folder.clone();
+            async move {
+                std::fs::write(
+                    format!("{}/{}", dest_folder, file_name),
+                    body::to_bytes(body).await.unwrap(),
                 )
-            })
-            .map(|(body, _)| body)
-            .map(|body| {
-                let file_name = String::from(file_name.as_ref());
-                Box::pin(async move {
-                    std::fs::write(
-                        format!("{}/{}", dest_folder, file_name),
-                        body::to_bytes(body).await.unwrap(),
-                    )
-                    .unwrap();
-                })
-            })
-        {
+                .unwrap();
+            }
+        }) {
             x.await;
             trace!("Downloaded {} ({})", file_id.as_ref(), file_name.as_ref());
+        }
+        // If failed to download the file -- trying to export it from Google Docs
+        else if let Some(ext) = futures::future::join_all(
+            [
+                ("application/rtf", "rtf"),
+                ("application/vnd.oasis.opendocument.text", "opendoc"),
+                (
+                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    "googledoc",
+                ),
+                ("application/pdf", "pdf"),
+                ("application/epub+zip", "epub.zip"),
+                ("application/zip", "zip"),
+                ("text/html", "html"),
+                ("text/plain", "txt"),
+            ]
+            .into_iter()
+            .map(|(mime, ext)| {
+                let file_id = file_id.as_ref().to_string();
+                async move {
+                    self.hub
+                        .lock()
+                        .await
+                        .files()
+                        .export(file_id.as_ref(), mime)
+                        .doit()
+                        .await
+                        .map(|res| (res, ext))
+                }
+            }),
+        )
+        .await
+        .into_iter()
+        .find(Result::is_ok)
+        .map(Result::unwrap)
+        .map(|(res, ext)| {
+            let file_name = file_name.as_ref().to_string();
+            async move {
+                std::fs::write(
+                    format!("{}/{}.{}", dest_folder, file_name, ext),
+                    body::to_bytes(res).await.unwrap(),
+                )
+                .unwrap();
+                ext
+            }
+        }) {
+            trace!(
+                "Exported {} ({}) as {}",
+                file_id.as_ref(),
+                file_name.as_ref(),
+                ext.await
+            );
+        } else {
+            warn!(
+                "Failed to download {} ({})",
+                file_name.as_ref(),
+                file_id.as_ref(),
+            )
         }
     }
 
