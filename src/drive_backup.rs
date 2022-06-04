@@ -255,6 +255,11 @@ impl DriveBackup {
             self.discover_file_parents(&file_id).await
         ));
 
+        trace!(
+            "Creating directory for file {}: `{}`",
+            file_id.as_ref(),
+            &*dest_folder
+        );
         std::fs::create_dir_all(&*dest_folder).unwrap();
         // Downloading file
         if let Ok(x) = async {
