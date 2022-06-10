@@ -291,8 +291,14 @@ impl DriveBackup {
         // If failed to download the file -- trying to export it from Google Docs
         else if let Some(ext) = futures::future::join_all(
             [
+                // MAIN DOCUMENT FORMAT
+                ("application/vnd.oasis.opendocument.text", "odt"), 
+                // MAIN TABLE FORMAT
+                ("application/x-vnd.oasis.opendocument.spreadsheet", "odf"), 
+                // MAIN PRESENTATION FORMAT
+                ("application/vnd.oasis.opendocument.presentation", "odp"), 
+                // FALLBACK FORMATS
                 ("application/rtf", "rtf"),
-                ("application/vnd.oasis.opendocument.text", "opendoc"),
                 (
                     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                     "googledoc",
