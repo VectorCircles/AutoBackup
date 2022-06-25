@@ -124,6 +124,8 @@ impl Backup for DriveBackup {
                         .map(AsRef::as_ref)
                         .map(DateTime::parse_from_rfc3339)
                         .map(Result::unwrap)
+                        .zip(Some(chrono::Duration::seconds(3)))
+                        .map(|(a, b)| a - b)
                 };
                 let modified_time = date(&file.modified_time)
                     .expect("Modified DateTime did not arrive with the response");
@@ -292,11 +294,11 @@ impl DriveBackup {
         else if let Some(ext) = futures::future::join_all(
             [
                 // MAIN DOCUMENT FORMAT
-                ("application/vnd.oasis.opendocument.text", "odt"), 
+                ("application/vnd.oasis.opendocument.text", "odt"),
                 // MAIN TABLE FORMAT
-                ("application/x-vnd.oasis.opendocument.spreadsheet", "odf"), 
+                ("application/x-vnd.oasis.opendocument.spreadsheet", "odf"),
                 // MAIN PRESENTATION FORMAT
-                ("application/vnd.oasis.opendocument.presentation", "odp"), 
+                ("application/vnd.oasis.opendocument.presentation", "odp"),
                 // FALLBACK FORMATS
                 ("application/rtf", "rtf"),
                 (
